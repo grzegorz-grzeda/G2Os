@@ -17,6 +17,10 @@ extern unsigned int __bss_end;
 extern unsigned int __data_begin;
 extern unsigned int __data_end;
 extern unsigned int __data_i_begin;
+extern unsigned int __stack;
+extern unsigned int __main_stack_size;
+extern char __heap_begin;
+extern char __heap_end;
 /*================================================================================================*/
 void systemInit(void);
 static void przygotujRam(void);
@@ -154,6 +158,10 @@ void systemInit(void) {
 	SysTick_Config(zegaryHz.rdzen / SYSTICK_RATE_HZ);
 	initLog();
 	info("--> SYSTEM START <--");
+	note("\t   CPU: STM32F051R8T6 @ %d Hz", zegaryHz.rdzen);
+	note("\t  Stos: 0x%.8X - %5d B", (unsigned int) &__stack, (unsigned int) &__main_stack_size);
+	note("\tSterta: 0x%.8X - %5d B", (unsigned int) &__heap_begin,
+	      (unsigned int) (&__heap_end - &__heap_begin));
 
 	returnCode = main();
 
@@ -192,9 +200,6 @@ static void przygotujZegary(void) {
 }
 /*================================================================================================*/
 caddr_t _sbrk(int incr) {
-	extern char __heap_begin;
-	extern char __heap_end;
-
 	static char* current_heap_end;
 	char* current_block_address;
 

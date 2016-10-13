@@ -52,6 +52,20 @@ static void printInitialText(void) {
 	print(RETURN_HOME);
 }
 /*================================================================================================*/
+void note(const char* text, ...) {
+	char buffer[70];
+	va_list args;
+
+	print(DEFAULT_FOREGROUND);
+
+	va_start(args, text);
+	vsprintf(buffer, text, args);
+	va_end(args);
+
+	print(buffer);
+	print("\n\r");
+}
+/*================================================================================================*/
 void info(const char* text, ...) {
 	va_list args;
 	va_start(args, text);

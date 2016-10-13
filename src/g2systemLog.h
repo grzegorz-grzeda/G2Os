@@ -15,6 +15,7 @@
 #define LOG_USART_BAUDRATE 115200
 /*================================================================================================*/
 void initLog(void);
+void note(const char* text, ...);
 void info(const char* text, ...);
 void warning(const char* text, ...);
 void error(const char* text, ...);
