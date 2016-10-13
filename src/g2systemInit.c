@@ -5,7 +5,6 @@
  *  Created on: 13.10.2016
  *      Author: grzegorz
  */
-
 /*================================================================================================*/
 #include <sys/types.h>
 #include <errno.h>
@@ -20,17 +19,15 @@ extern unsigned int __data_end;
 extern unsigned int __data_i_begin;
 /*================================================================================================*/
 void systemInit(void);
+static void przygotujRam(void);
+static void przygotujZegary(void);
+static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned int priorytet);
 static void nmi_handler(void);
 static void hardfault_handler(void) __attribute__ ((naked));
-static void svc_handler(void) __attribute__ ((naked));
+static void svc_handler(unsigned int param, void* ptr);
 static void pendsv_handler(void);
 static void systick_handler(void);
 static void systemDefault_handler(void);
-
-static void przygotujRam(void);
-static void przygotujZegary(void);
-static int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void));
-static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void));
 
 extern int main(void);
 /*================================================================================================*/
@@ -82,6 +79,8 @@ unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) systemDefault_handler, // CEC
       (unsigned int *) systemDefault_handler };
 /*================================================================================================*/
+typedef void (*irqHandlerPtr)(void);
+/*================================================================================================*/
 static irqHandlerPtr virtualIrqHandlerTable[64];
 /*================================================================================================*/
 static volatile unsigned int systemCnt;
@@ -91,6 +90,7 @@ static struct {
 	unsigned int magistralaAPB1;
 	unsigned int magistralaAPB2;
 } zegaryHz;
+/*================================================================================================*/
 /*================================================================================================*/
 void opoznienieMs(unsigned int t) {
 	t += systemCnt;
@@ -103,30 +103,18 @@ unsigned int pobierzCzasMs(void) {
 }
 /*================================================================================================*/
 int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
-	int wynik = zapiszPrzerwanie(irqNumber, irqHandler);
-	if (wynik == 0) {
-		NVIC_SetPriority(irqNumber, 1);
-		if (irqNumber >= 0)
-			NVIC_EnableIRQ(irqNumber);
+	int wynik = zapiszPrzerwanie(irqNumber, irqHandler, 3);
+	if ((irqNumber >= 0) && (wynik == 0)) {
+		NVIC_EnableIRQ(irqNumber);
 	}
 	return wynik;
 }
 /*================================================================================================*/
-static int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void)) {
-	int wynik = zapiszPrzerwanie(irqNumber, irqHandler);
-	if (wynik == 0) {
-		NVIC_SetPriority(irqNumber, 0);
-	}
-	return wynik;
-}
-/*================================================================================================*/
-static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
-	irqNumber += 16;
-	if (virtualIrqHandlerTable[irqNumber])
-		return 1;
-	else
-		virtualIrqHandlerTable[irqNumber] = irqHandler;
-	return 0;
+int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void)) {
+	unsigned int priorytet = 1;
+	if (irqNumber == PendSV_IRQn)
+		priorytet = 0;
+	return zapiszPrzerwanie(irqNumber, irqHandler, priorytet);
 }
 /*================================================================================================*/
 void wyrejestrujPrzerwanie(int irqNumber) {
@@ -135,10 +123,22 @@ void wyrejestrujPrzerwanie(int irqNumber) {
 	virtualIrqHandlerTable[irqNumber + 16] = 0;
 }
 /*================================================================================================*/
-void wywolajKernel(unsigned int param, unsigned int* ptr) {
+void wywolajKernel(unsigned int param, void* ptr) {
 	(void) param;
 	(void) ptr;
 	__asm("SVC #0\n");
+}
+/*================================================================================================*/
+/*================================================================================================*/
+static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned int priorytet) {
+	irqNumber += 16;
+	if (virtualIrqHandlerTable[irqNumber])
+		return 1;
+	else
+		virtualIrqHandlerTable[irqNumber] = irqHandler;
+
+	NVIC_SetPriority(irqNumber, priorytet);
+	return 0;
 }
 /*================================================================================================*/
 void systemInit(void) {
@@ -147,13 +147,13 @@ void systemInit(void) {
 	przygotujRam();
 	przygotujZegary();
 
-	zarejestrujPrzerwanieSystemowe(SVC_IRQn, svc_handler);
+	zarejestrujPrzerwanieSystemowe(SVC_IRQn, (irqHandlerPtr) svc_handler);
 	zarejestrujPrzerwanieSystemowe(PendSV_IRQn, pendsv_handler);
 	zarejestrujPrzerwanieSystemowe(SysTick_IRQn, systick_handler);
 
-	SysTick_Config(zegaryHz.rdzen / 1000);
-	initLog(115200);
-	info("Start systemu.");
+	SysTick_Config(zegaryHz.rdzen / SYSTICK_RATE_HZ);
+	initLog();
+	info("--> SYSTEM START <--");
 
 	returnCode = main();
 
@@ -161,12 +161,12 @@ void systemInit(void) {
 		warning("System konczy prace z kodem: %d.", returnCode);
 	else
 		info("System zakonczyl prace bez bledow.");
-	info("SYSTEM STOP.");
+	info("--> SYSTEM STOP <--");
 	while (1)
 		;
 }
 /*================================================================================================*/
-void przygotujRam(void) {
+static void przygotujRam(void) {
 	unsigned int *bss_b = &__bss_begin;
 	unsigned int *bss_e = &__bss_end;
 	unsigned int *data_b = &__data_begin;
@@ -184,7 +184,7 @@ void przygotujRam(void) {
 	}
 }
 /*================================================================================================*/
-void przygotujZegary(void) {
+static void przygotujZegary(void) {
 	zegaryHz.rdzen = HSE_VALUE;
 	zegaryHz.magistralaAHB = HSE_VALUE;
 	zegaryHz.magistralaAPB1 = HSE_VALUE;
@@ -213,7 +213,7 @@ caddr_t _sbrk(int incr) {
 	return (caddr_t) current_block_address;
 }
 /*================================================================================================*/
-void nmi_handler(void) {
+static void nmi_handler(void) {
 	return;
 }
 /*================================================================================================*/
@@ -254,7 +254,7 @@ void hardfault_handler(void) {
 			".syntax divided\n");
 }
 /*================================================================================================*/
-void systemDefault_handler(void) {
+static void systemDefault_handler(void) {
 	unsigned int exceptionNumber = __get_IPSR();
 	if (virtualIrqHandlerTable[exceptionNumber] == 0)
 		while (1)
@@ -262,21 +262,18 @@ void systemDefault_handler(void) {
 	virtualIrqHandlerTable[exceptionNumber]();
 }
 /*================================================================================================*/
-void svc_evaluate(unsigned int param, unsigned int *ptr) {
+void svc_handler(unsigned int param, void *ptr) {
 	info("Jestem w SVC!");
-	printlnHex("param", param);
-	printlnHex("ptr", (unsigned int) ptr);
+	info("Wydruk przeslanych danych:");
+	printlnHex("u32 ", param);
+	printlnHex("void*", (unsigned int) ptr);
 }
 /*================================================================================================*/
-void svc_handler(void) {
-	__asm("B      svc_evaluate \n");
-}
-/*================================================================================================*/
-void pendsv_handler(void) {
+static void pendsv_handler(void) {
 	info("Jestem w PendSV!");
 }
 /*================================================================================================*/
-void systick_handler(void) {
+static void systick_handler(void) {
 	systemCnt++;
 }
 /*================================================================================================*/

@@ -1,11 +1,19 @@
+/*================================================================================================*/
+/*
+ * main.c
+ *
+ *  Created on: 13.10.2016
+ *      Author: grzegorz
+ */
+/*================================================================================================*/
 #include "g2systemInit.h"
 #include "g2systemLog.h"
-
+/*================================================================================================*/
 #define LICZBA_PROB 5
 #define WYWOLANIE_DLA_SVC 2
 #define WYWOLANIE_DLA_PENDSV 3
 #define WYWOLANIE_DLA_HARDFAULT 4
-
+/*================================================================================================*/
 void inicjalizuj(void) {
 	info("Konfigurowanie diod LED.");
 	RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
@@ -14,27 +22,29 @@ void inicjalizuj(void) {
 	GPIOC->ODR = (1 << 9);
 	info("System gotowy do pracy.");
 }
+/*================================================================================================*/
 void przerzucLed(int numer) {
 	numer &= 0xF;
 	GPIOC->ODR ^= (1 << numer);
 }
+/*================================================================================================*/
 void wywolajPendSV(void) {
 	SCB->ICSR |= (1 << 28);
 }
-
+/*================================================================================================*/
 void wykrzaczSystem(void) {
 	unsigned int *slowo32 = (unsigned int *) 0x08000000;
-	warning("Probuje zapisac do FLASH...");
+	warning("Probuje zapisac do FLASH przez zwykly wskaznik...");
 	*slowo32 = 1;
 	(void) slowo32;
 }
-
+/*================================================================================================*/
 int main(void) {
-	int i = 0;
+	int kodBledu = (GPIOA->IDR & 1) ? 1 : 0;
 
 	inicjalizuj();
 
-	for (i = 0; i < LICZBA_PROB; i++) {
+	for (int i = 0; i < LICZBA_PROB; i++) {
 		info("Ku-ku po raz %d!", i);
 		przerzucLed(8);
 		przerzucLed(9);
@@ -42,7 +52,7 @@ int main(void) {
 		switch (i) {
 			case WYWOLANIE_DLA_SVC:
 				info("Wywoluje funkcje kernela!");
-				wywolajKernel(1, NULL);
+				wywolajKernel(kodBledu, &kodBledu);
 				break;
 			case WYWOLANIE_DLA_PENDSV:
 				info("Wyzwalam zdarzenie PendSV!");
@@ -58,5 +68,8 @@ int main(void) {
 
 		opoznienieMs(500);
 	}
-	return 0;
+	return kodBledu;
 }
+/*================================================================================================*/
+/*                                              EOF                                               */
+/*================================================================================================*/

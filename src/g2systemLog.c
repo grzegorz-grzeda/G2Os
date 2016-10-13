@@ -5,7 +5,6 @@
  *  Created on: 13.10.2016
  *      Author: grzegorz
  */
-
 /*================================================================================================*/
 #include "g2systemLog.h"
 /*================================================================================================*/
@@ -20,21 +19,34 @@
 #define LOG_USART_BAUD_DIV (1)
 #define LOG_USART_CLOCK (HSE_VALUE)
 /*================================================================================================*/
+static void initializeGPIO(void);
+static void initializeUSART(void);
+static void printInitialText(void);
 static void printMessage(const char *label, const char* ctrlSeq, const char* text, va_list args);
 static void print(const char* text);
 static void put(char c);
 /*================================================================================================*/
-void initLog(unsigned int baudrate) {
+void initLog(void) {
+	initializeGPIO();
+	initializeUSART();
+	printInitialText();
+}
+/*================================================================================================*/
+static void initializeGPIO(void) {
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
 	GPIOA->MODER &= ~(0x3 << (9 << 1));
 	GPIOA->MODER |= (0x2 << (9 << 1));
 	GPIOA->AFR[1] &= ~(0x3 << ((9 - 8) << 2));
 	GPIOA->AFR[1] |= (0x1 << ((9 - 8) << 2));
-
+}
+/*================================================================================================*/
+static void initializeUSART(void) {
 	LOG_USART_RCC_ENABLE();
-	LOG_USART->BRR = LOG_USART_CLOCK / LOG_USART_BAUD_DIV / baudrate;
+	LOG_USART->BRR = LOG_USART_CLOCK / LOG_USART_BAUD_DIV / LOG_USART_BAUDRATE;
 	LOG_USART->CR1 = USART_CR1_UE | USART_CR1_TE;
-
+}
+/*================================================================================================*/
+static void printInitialText(void) {
 	print(DEFAULT_FOREGROUND);
 	print(CLEAR_SCREEN);
 	print(RETURN_HOME);
@@ -63,7 +75,7 @@ void error(const char* text, ...) {
 /*================================================================================================*/
 void printlnHex(const char* label, unsigned int value) {
 	char buffer[30];
-	sprintf(buffer, "\t%6s = 0x%.8X\n\r", label, value);
+	sprintf(buffer, "\t%6.6s = 0x%.8X\n\r", label, value);
 	print(buffer);
 }
 /*================================================================================================*/
@@ -71,7 +83,7 @@ void printlnHex(const char* label, unsigned int value) {
 static void printMessage(const char *label, const char* ctrlSeq, const char* text, va_list args) {
 	char buffer[70];
 	print(ctrlSeq);
-	sprintf(buffer, "[%8s] - %10d ms - ", label, pobierzCzasMs());
+	sprintf(buffer, "[%8.8s] - %10u ms - ", label, pobierzCzasMs());
 	print(buffer);
 	vsprintf(buffer, text, args);
 	print(buffer);

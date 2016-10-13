@@ -5,7 +5,6 @@
  *  Created on: 13.10.2016
  *      Author: grzegorz
  */
-
 /*================================================================================================*/
 #ifndef G2SYSTEMLOG_H_
 #define G2SYSTEMLOG_H_
@@ -13,7 +12,9 @@
 #include "g2systemInit.h"
 #include "stdarg.h"
 /*================================================================================================*/
-void initLog(unsigned int baudrate);
+#define LOG_USART_BAUDRATE 115200
+/*================================================================================================*/
+void initLog(void);
 void info(const char* text, ...);
 void warning(const char* text, ...);
 void error(const char* text, ...);
