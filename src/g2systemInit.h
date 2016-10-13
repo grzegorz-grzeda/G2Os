@@ -14,8 +14,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 /*================================================================================================*/
-void delayMs(unsigned int t);
-unsigned int getSystemTimeMs(void);
+typedef void (*irqHandlerPtr)(void);
+/*================================================================================================*/
+void opoznienieMs(unsigned int t);
+unsigned int pobierzCzasMs(void);
+int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void));
+void wyrejestrujPrzerwanie(int irqNumber);
+void wywolajKernel(unsigned int param, unsigned int* ptr);
 /*================================================================================================*/
 /*================================================================================================*/
 #endif /* G2SYSTEMINIT_H_ */

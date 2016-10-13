@@ -8,7 +8,7 @@ __main_stack_size = 1024;
 __heap_begin = __init_end;
 __heap_end = __stack - __main_stack_size;
 
-ENTRY(main)
+ENTRY(systemInit)
 
 SECTIONS
 {

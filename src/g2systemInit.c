@@ -19,14 +19,18 @@ extern unsigned int __data_begin;
 extern unsigned int __data_end;
 extern unsigned int __data_i_begin;
 /*================================================================================================*/
-volatile unsigned int systemCnt;
-/*================================================================================================*/
-void nmi_handler(void);
-void hardfault_handler(void) __attribute__ ((naked));
-void svc_handler(void);
-void pendsv_handler(void);
-void systick_handler(void);
 void systemInit(void);
+static void nmi_handler(void);
+static void hardfault_handler(void) __attribute__ ((naked));
+static void svc_handler(void) __attribute__ ((naked));
+static void pendsv_handler(void);
+static void systick_handler(void);
+static void systemDefault_handler(void);
+
+static void przygotujRam(void);
+static void przygotujZegary(void);
+static int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void));
+static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void));
 
 extern int main(void);
 /*================================================================================================*/
@@ -42,28 +46,133 @@ unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) 0,
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) svc_handler,
+      (unsigned int *) systemDefault_handler, // SVC
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) pendsv_handler,
-      (unsigned int *) systick_handler };
+      (unsigned int *) systemDefault_handler, // PendSV
+      (unsigned int *) systemDefault_handler, // SysTick
+      (unsigned int *) systemDefault_handler, // WWDG
+      (unsigned int *) systemDefault_handler, // PVD
+      (unsigned int *) systemDefault_handler, // RTC
+      (unsigned int *) systemDefault_handler, // FLASH
+      (unsigned int *) systemDefault_handler, // RCC
+      (unsigned int *) systemDefault_handler, // EXTI 0 1
+      (unsigned int *) systemDefault_handler, // EXTI 2 3
+      (unsigned int *) systemDefault_handler, // EXTI 4 15
+      (unsigned int *) systemDefault_handler, // TS
+      (unsigned int *) systemDefault_handler, // DMA1 1
+      (unsigned int *) systemDefault_handler, // DMA1 2 3
+      (unsigned int *) systemDefault_handler, // DMA1 4 5
+      (unsigned int *) systemDefault_handler, // ADC1 COMP1 COMP2
+      (unsigned int *) systemDefault_handler, // TIM1 BRK UP TRIG COM
+      (unsigned int *) systemDefault_handler, // TIM1 CC
+      (unsigned int *) systemDefault_handler, // TIM2
+      (unsigned int *) systemDefault_handler, // TIM3
+      (unsigned int *) systemDefault_handler, // TIM6
+      (unsigned int *) systemDefault_handler, // TIM14
+      (unsigned int *) systemDefault_handler, // TIM15
+      (unsigned int *) systemDefault_handler, // TIM16
+      (unsigned int *) systemDefault_handler, // TIM17
+      (unsigned int *) systemDefault_handler, // I2C1
+      (unsigned int *) systemDefault_handler, // I2C2
+      (unsigned int *) systemDefault_handler, // SPI1
+      (unsigned int *) systemDefault_handler, // SPI2
+      (unsigned int *) systemDefault_handler, // USART1
+      (unsigned int *) systemDefault_handler, // USART2
+      (unsigned int *) systemDefault_handler, // CEC
+      (unsigned int *) systemDefault_handler };
 /*================================================================================================*/
-void delayMs(unsigned int t) {
+static irqHandlerPtr virtualIrqHandlerTable[64];
+/*================================================================================================*/
+static volatile unsigned int systemCnt;
+static struct {
+	unsigned int rdzen;
+	unsigned int magistralaAHB;
+	unsigned int magistralaAPB1;
+	unsigned int magistralaAPB2;
+} zegaryHz;
+/*================================================================================================*/
+void opoznienieMs(unsigned int t) {
 	t += systemCnt;
 	while (t != systemCnt)
 		;
 }
 /*================================================================================================*/
-unsigned int getSystemTimeMs(void) {
+unsigned int pobierzCzasMs(void) {
 	return systemCnt;
 }
 /*================================================================================================*/
+int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
+	int wynik = zapiszPrzerwanie(irqNumber, irqHandler);
+	if (wynik == 0) {
+		NVIC_SetPriority(irqNumber, 1);
+		if (irqNumber >= 0)
+			NVIC_EnableIRQ(irqNumber);
+	}
+	return wynik;
+}
+/*================================================================================================*/
+static int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void)) {
+	int wynik = zapiszPrzerwanie(irqNumber, irqHandler);
+	if (wynik == 0) {
+		NVIC_SetPriority(irqNumber, 0);
+	}
+	return wynik;
+}
+/*================================================================================================*/
+static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
+	irqNumber += 16;
+	if (virtualIrqHandlerTable[irqNumber])
+		return 1;
+	else
+		virtualIrqHandlerTable[irqNumber] = irqHandler;
+	return 0;
+}
+/*================================================================================================*/
+void wyrejestrujPrzerwanie(int irqNumber) {
+	if (irqNumber >= 0)
+		NVIC_DisableIRQ(irqNumber);
+	virtualIrqHandlerTable[irqNumber + 16] = 0;
+}
+/*================================================================================================*/
+void wywolajKernel(unsigned int param, unsigned int* ptr) {
+	(void) param;
+	(void) ptr;
+	__asm("SVC #0\n");
+}
+/*================================================================================================*/
 void systemInit(void) {
+	int returnCode;
+
+	przygotujRam();
+	przygotujZegary();
+
+	zarejestrujPrzerwanieSystemowe(SVC_IRQn, svc_handler);
+	zarejestrujPrzerwanieSystemowe(PendSV_IRQn, pendsv_handler);
+	zarejestrujPrzerwanieSystemowe(SysTick_IRQn, systick_handler);
+
+	SysTick_Config(zegaryHz.rdzen / 1000);
+	initLog(115200);
+	info("Start systemu.");
+
+	returnCode = main();
+
+	if(returnCode)
+		warning("System konczy prace z kodem: %d.", returnCode);
+	else
+		info("System zakonczyl prace bez bledow.");
+	info("SYSTEM STOP.");
+	while (1)
+		;
+}
+/*================================================================================================*/
+void przygotujRam(void) {
 	unsigned int *bss_b = &__bss_begin;
 	unsigned int *bss_e = &__bss_end;
 	unsigned int *data_b = &__data_begin;
 	unsigned int *data_e = &__data_end;
 	unsigned int *data_i_b = &__data_i_begin;
+
 	while (bss_b < bss_e) {
 		*bss_b = 0;
 		bss_b++;
@@ -73,26 +182,18 @@ void systemInit(void) {
 		data_b++;
 		data_i_b++;
 	}
-
-	SysTick_Config(HSE_VALUE / 1000);
-	initLog(115200);
-	info("Start systemu.");
-
-	info("Konfigurowanie diod LED.");
-	RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
-	GPIOC->MODER &= ~(3 << (8 << 1)) | (3 << (9 << 1));
-	GPIOC->MODER |= (1 << (8 << 1)) | (1 << (9 << 1));
-	GPIOC->ODR = (1 << 9);
-	info("System gotowy do pracy.");
-
-	main();
-	while (1)
-		;
+}
+/*================================================================================================*/
+void przygotujZegary(void) {
+	zegaryHz.rdzen = HSE_VALUE;
+	zegaryHz.magistralaAHB = HSE_VALUE;
+	zegaryHz.magistralaAPB1 = HSE_VALUE;
+	zegaryHz.magistralaAPB2 = HSE_VALUE;
 }
 /*================================================================================================*/
 caddr_t _sbrk(int incr) {
-	extern char __heap_begin; // Defined by the linker.
-	extern char __heap_end; // Defined by the linker.
+	extern char __heap_begin;
+	extern char __heap_end;
 
 	static char* current_heap_end;
 	char* current_block_address;
@@ -100,7 +201,6 @@ caddr_t _sbrk(int incr) {
 	if (current_heap_end == 0) {
 		current_heap_end = &__heap_begin;
 	}
-
 	current_block_address = current_heap_end;
 
 	incr = (incr + 3) & (~3); // align value to 4
@@ -154,20 +254,26 @@ void hardfault_handler(void) {
 			".syntax divided\n");
 }
 /*================================================================================================*/
-void svc_handler(void) {
-	info("Jestem w SVC!");
-	return;
+void systemDefault_handler(void) {
+	unsigned int exceptionNumber = __get_IPSR();
+	if (virtualIrqHandlerTable[exceptionNumber] == 0)
+		while (1)
+			;
+	virtualIrqHandlerTable[exceptionNumber]();
 }
 /*================================================================================================*/
-void (*f)(void);
+void svc_evaluate(unsigned int param, unsigned int *ptr) {
+	info("Jestem w SVC!");
+	printlnHex("param", param);
+	printlnHex("ptr", (unsigned int) ptr);
+}
+/*================================================================================================*/
+void svc_handler(void) {
+	__asm("B      svc_evaluate \n");
+}
+/*================================================================================================*/
 void pendsv_handler(void) {
-	GPIOC->ODR |= (3 << 8);
 	info("Jestem w PendSV!");
-
-	warning("Wykonuje czynnosc zabroniona!");
-	f(); // to spowoduje twardy wyjątek
-	while (1)
-		;
 }
 /*================================================================================================*/
 void systick_handler(void) {

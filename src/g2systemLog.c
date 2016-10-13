@@ -71,7 +71,7 @@ void printlnHex(const char* label, unsigned int value) {
 static void printMessage(const char *label, const char* ctrlSeq, const char* text, va_list args) {
 	char buffer[70];
 	print(ctrlSeq);
-	sprintf(buffer, "[%8s] - %10d ms - ", label, getSystemTimeMs());
+	sprintf(buffer, "[%8s] - %10d ms - ", label, pobierzCzasMs());
 	print(buffer);
 	vsprintf(buffer, text, args);
 	print(buffer);
