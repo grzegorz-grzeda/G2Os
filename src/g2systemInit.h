@@ -15,6 +15,28 @@
 /*================================================================================================*/
 #define SYSTICK_RATE_HZ 1000
 /*================================================================================================*/
+typedef struct {
+	unsigned int R0;
+	unsigned int R1;
+	unsigned int R2;
+	unsigned int R3;
+	unsigned int R12;
+	unsigned int LR;
+	unsigned int PC;
+	unsigned int PSR;
+} StosRejestrowPodstawowych;
+/*================================================================================================*/
+typedef struct {
+	unsigned int R4;
+	unsigned int R5;
+	unsigned int R6;
+	unsigned int R7;
+	unsigned int R8;
+	unsigned int R9;
+	unsigned int R10;
+	unsigned int R11;
+} StosRejestrowPozostalych;
+/*================================================================================================*/
 void opoznienieMs(unsigned int t);
 unsigned int pobierzCzasMs(void);
 int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void));

@@ -222,17 +222,17 @@ static void nmi_handler(void) {
 	return;
 }
 /*================================================================================================*/
-void hardfault_evaulate(unsigned int *stack) {
+void hardfault_evaulate(StosRejestrowPodstawowych *r) {
 	error("TWARDY WYJATEK!");
 	error("Wartosci rejestrow rdzenia oraz SCB:");
-	printlnHex("R0", stack[0]);
-	printlnHex("R1", stack[1]);
-	printlnHex("R2", stack[2]);
-	printlnHex("R3", stack[3]);
-	printlnHex("R12", stack[4]);
-	printlnHex("LR", stack[5]);
-	printlnHex("PC", stack[6]);
-	printlnHex("PSR", stack[7]);
+	printlnHex("R0", r->R0);
+	printlnHex("R1", r->R1);
+	printlnHex("R2", r->R2);
+	printlnHex("R3", r->R3);
+	printlnHex("R12", r->R12);
+	printlnHex("LR", r->LR);
+	printlnHex("PC", r->PC);
+	printlnHex("PSR", r->PSR);
 	printlnHex("CPUID", SCB->CPUID);
 	printlnHex("ICSR", SCB->ICSR);
 	printlnHex("AIRCR", SCB->AIRCR);
