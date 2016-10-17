@@ -10,14 +10,14 @@
 /*================================================================================================*/
 #define RETURN_HOME "\x1B[H"
 #define CLEAR_SCREEN "\x1B[2J"
-#define DEFAULT_FOREGROUND "\x1B[39m"
-#define YELLOW_FOREGROUND "\x1B[33m"
-#define RED_FOREGROUND "\x1B[31m"
+#define DEFAULT_COLOR "\x1B[0;39;49m"
+#define YELLOW_COLOR "\x1B[33;49m"
+#define RED_COLOR "\x1B[31;49m"
+#define CRITICAL_COLOR "\x1B[31;46m"
 /*================================================================================================*/
 #define LOG_USART USART1
 #define LOG_USART_RCC_ENABLE() for(;;){RCC->APB2ENR |= RCC_APB2ENR_USART1EN;break;}
 #define LOG_USART_BAUD_DIV (1)
-#define LOG_USART_CLOCK (HSE_VALUE)
 /*================================================================================================*/
 static void initializeGPIO(void);
 static void initializeUSART(void);
@@ -42,12 +42,12 @@ static void initializeGPIO(void) {
 /*================================================================================================*/
 static void initializeUSART(void) {
 	LOG_USART_RCC_ENABLE();
-	LOG_USART->BRR = LOG_USART_CLOCK / LOG_USART_BAUD_DIV / LOG_USART_BAUDRATE;
+	LOG_USART->BRR = getCoreHz() / LOG_USART_BAUD_DIV / LOG_USART_BAUDRATE;
 	LOG_USART->CR1 = USART_CR1_UE | USART_CR1_TE;
 }
 /*================================================================================================*/
 static void printInitialText(void) {
-	print(DEFAULT_FOREGROUND);
+	print(DEFAULT_COLOR);
 	print(CLEAR_SCREEN);
 	print(RETURN_HOME);
 }
@@ -56,7 +56,7 @@ void note(const char* text, ...) {
 	char buffer[70];
 	va_list args;
 
-	print(DEFAULT_FOREGROUND);
+	print(DEFAULT_COLOR);
 
 	va_start(args, text);
 	vsprintf(buffer, text, args);
@@ -69,21 +69,28 @@ void note(const char* text, ...) {
 void info(const char* text, ...) {
 	va_list args;
 	va_start(args, text);
-	printMessage("INFO", DEFAULT_FOREGROUND, text, args);
+	printMessage("INFO", DEFAULT_COLOR, text, args);
 	va_end(args);
 }
 /*================================================================================================*/
 void warning(const char* text, ...) {
 	va_list args;
 	va_start(args, text);
-	printMessage("WARNING", YELLOW_FOREGROUND, text, args);
+	printMessage("WARNING", YELLOW_COLOR, text, args);
 	va_end(args);
 }
 /*================================================================================================*/
 void error(const char* text, ...) {
 	va_list args;
 	va_start(args, text);
-	printMessage("ERROR", RED_FOREGROUND, text, args);
+	printMessage("ERROR", RED_COLOR, text, args);
+	va_end(args);
+}
+/*================================================================================================*/
+void critical(const char* text, ...) {
+	va_list args;
+	va_start(args, text);
+	printMessage("CRITICAL", CRITICAL_COLOR, text, args);
 	va_end(args);
 }
 /*================================================================================================*/
@@ -97,7 +104,7 @@ void printlnHex(const char* label, unsigned int value) {
 static void printMessage(const char *label, const char* ctrlSeq, const char* text, va_list args) {
 	char buffer[70];
 	print(ctrlSeq);
-	sprintf(buffer, "[%8.8s] - %10u ms - ", label, pobierzCzasMs());
+	sprintf(buffer, "[%8.8s] - %10u ms - ", label, getTimeMs());
 	print(buffer);
 	vsprintf(buffer, text, args);
 	print(buffer);

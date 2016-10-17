@@ -21,26 +21,26 @@ extern unsigned int __stack;
 extern unsigned int __main_stack_size;
 extern char __heap_begin;
 extern char __heap_end;
+extern unsigned int __main_heap_size;
 /*================================================================================================*/
 void systemInit(void);
-static void przygotujRam(void);
-static void przygotujZegary(void);
-static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned int priorytet);
-static void nmi_handler(void);
-static void hardfault_handler(void) __attribute__ ((naked));
-static void svc_handler(unsigned int param, void* ptr);
-static void pendsv_handler(void) __attribute__ ((naked));
-;
-static void systick_handler(void);
-static void systemDefault_handler(void);
+static void initRam(void);
+static void initClocks(void);
+static int saveISR(int irqNumber, void*irqHandler, unsigned int priorytet);
+static void NMI_Handler(void);
+static void HardFault_Handler(void) __attribute__ ((naked));
+static void SVC_Handler(unsigned int param, void* ptr);
+static void PendSV_Handler(void) __attribute__ ((naked));
+static void SysTick_Handler(void);
+static void SystemDefault_Handler(void);
 
 extern int main(void);
 /*================================================================================================*/
 unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) &__stack,
       (unsigned int *) systemInit,
-      (unsigned int *) nmi_handler,
-      (unsigned int *) hardfault_handler,
+      (unsigned int *) NMI_Handler,
+      (unsigned int *) HardFault_Handler,
       (unsigned int *) 0,
       (unsigned int *) 0,
       (unsigned int *) 0,
@@ -48,41 +48,41 @@ unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) 0,
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) svc_handler, // SVC
+      (unsigned int *) SVC_Handler, // SVC
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) pendsv_handler, // PendSV
-      (unsigned int *) systick_handler, // SysTick
-      (unsigned int *) systemDefault_handler, // WWDG
-      (unsigned int *) systemDefault_handler, // PVD
-      (unsigned int *) systemDefault_handler, // RTC
-      (unsigned int *) systemDefault_handler, // FLASH
-      (unsigned int *) systemDefault_handler, // RCC
-      (unsigned int *) systemDefault_handler, // EXTI 0 1
-      (unsigned int *) systemDefault_handler, // EXTI 2 3
-      (unsigned int *) systemDefault_handler, // EXTI 4 15
-      (unsigned int *) systemDefault_handler, // TS
-      (unsigned int *) systemDefault_handler, // DMA1 1
-      (unsigned int *) systemDefault_handler, // DMA1 2 3
-      (unsigned int *) systemDefault_handler, // DMA1 4 5
-      (unsigned int *) systemDefault_handler, // ADC1 COMP1 COMP2
-      (unsigned int *) systemDefault_handler, // TIM1 BRK UP TRIG COM
-      (unsigned int *) systemDefault_handler, // TIM1 CC
-      (unsigned int *) systemDefault_handler, // TIM2
-      (unsigned int *) systemDefault_handler, // TIM3
-      (unsigned int *) systemDefault_handler, // TIM6
-      (unsigned int *) systemDefault_handler, // TIM14
-      (unsigned int *) systemDefault_handler, // TIM15
-      (unsigned int *) systemDefault_handler, // TIM16
-      (unsigned int *) systemDefault_handler, // TIM17
-      (unsigned int *) systemDefault_handler, // I2C1
-      (unsigned int *) systemDefault_handler, // I2C2
-      (unsigned int *) systemDefault_handler, // SPI1
-      (unsigned int *) systemDefault_handler, // SPI2
-      (unsigned int *) systemDefault_handler, // USART1
-      (unsigned int *) systemDefault_handler, // USART2
-      (unsigned int *) systemDefault_handler, // CEC
-      (unsigned int *) systemDefault_handler };
+      (unsigned int *) PendSV_Handler, // PendSV
+      (unsigned int *) SysTick_Handler, // SysTick
+      (unsigned int *) SystemDefault_Handler, // WWDG
+      (unsigned int *) SystemDefault_Handler, // PVD
+      (unsigned int *) SystemDefault_Handler, // RTC
+      (unsigned int *) SystemDefault_Handler, // FLASH
+      (unsigned int *) SystemDefault_Handler, // RCC
+      (unsigned int *) SystemDefault_Handler, // EXTI 0 1
+      (unsigned int *) SystemDefault_Handler, // EXTI 2 3
+      (unsigned int *) SystemDefault_Handler, // EXTI 4 15
+      (unsigned int *) SystemDefault_Handler, // TS
+      (unsigned int *) SystemDefault_Handler, // DMA1 1
+      (unsigned int *) SystemDefault_Handler, // DMA1 2 3
+      (unsigned int *) SystemDefault_Handler, // DMA1 4 5
+      (unsigned int *) SystemDefault_Handler, // ADC1 COMP1 COMP2
+      (unsigned int *) SystemDefault_Handler, // TIM1 BRK UP TRIG COM
+      (unsigned int *) SystemDefault_Handler, // TIM1 CC
+      (unsigned int *) SystemDefault_Handler, // TIM2
+      (unsigned int *) SystemDefault_Handler, // TIM3
+      (unsigned int *) SystemDefault_Handler, // TIM6
+      (unsigned int *) SystemDefault_Handler, // TIM14
+      (unsigned int *) SystemDefault_Handler, // TIM15
+      (unsigned int *) SystemDefault_Handler, // TIM16
+      (unsigned int *) SystemDefault_Handler, // TIM17
+      (unsigned int *) SystemDefault_Handler, // I2C1
+      (unsigned int *) SystemDefault_Handler, // I2C2
+      (unsigned int *) SystemDefault_Handler, // SPI1
+      (unsigned int *) SystemDefault_Handler, // SPI2
+      (unsigned int *) SystemDefault_Handler, // USART1
+      (unsigned int *) SystemDefault_Handler, // USART2
+      (unsigned int *) SystemDefault_Handler, // CEC
+      (unsigned int *) SystemDefault_Handler };
 /*================================================================================================*/
 typedef struct {
 	void (*uchwyt)(void*);
@@ -107,36 +107,50 @@ static volatile unsigned int systemCnt;
 static struct {
 	unsigned int rdzen;
 	unsigned int magistralaAHB;
-	unsigned int magistralaAPB1;
-	unsigned int magistralaAPB2;
+	unsigned int magistralaAPB;
 } zegaryHz;
 /*================================================================================================*/
+typedef struct {
+	unsigned int R0;
+	unsigned int R1;
+	unsigned int R2;
+	unsigned int R3;
+	unsigned int R12;
+	unsigned int LR;
+	unsigned int PC;
+	unsigned int PSR;
+} ExceptionFrame;
 /*================================================================================================*/
-void opoznienieMs(unsigned int t) {
+/*================================================================================================*/
+void delayMs(unsigned int t) {
 	t += systemCnt;
 	while (t != systemCnt)
 		;
 }
 /*================================================================================================*/
-unsigned int pobierzCzasMs(void) {
+unsigned int getTimeMs(void) {
 	return systemCnt;
 }
 /*================================================================================================*/
-int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
-	int wynik = zapiszPrzerwanie(irqNumber, irqHandler, 3);
+unsigned int getCoreHz(void) {
+	return zegaryHz.rdzen;
+}
+/*================================================================================================*/
+int registerISR(int irqNumber, void* irqHandler) {
+	int wynik = saveISR(irqNumber, irqHandler, 3);
 	if ((irqNumber >= 0) && (wynik == 0)) {
 		NVIC_EnableIRQ(irqNumber);
 	}
 	return wynik;
 }
 /*================================================================================================*/
-void wyrejestrujPrzerwanie(int irqNumber) {
+void unregisterISR(int irqNumber) {
 	if (irqNumber >= 0)
 		NVIC_DisableIRQ(irqNumber);
 	virtualIrqHandlerTable[irqNumber + 16] = 0;
 }
 /*================================================================================================*/
-int zarejestrujWatek(void* watek, const char* nazwa, void* parametry) {
+int registerThread(void* watek, const char* nazwa, void* parametry) {
 	if (OS.liczbaWatkow == OS_MAX_THREAD_CNT)
 		return -1;
 
@@ -148,46 +162,31 @@ int zarejestrujWatek(void* watek, const char* nazwa, void* parametry) {
 	w->nazwa[19] = 0;
 	w->parametry = parametry;
 
-	w->SP = OS_THREAD_STACK - 1;
-	w->stos[w->SP--] = 0x41000000; // PSR
-	w->stos[w->SP--] = ((unsigned int) watek); // PC
-	w->stos[w->SP--] = 0; // LR
-	w->stos[w->SP--] = 0; // R12
-	w->stos[w->SP--] = 0; // R3
-	w->stos[w->SP--] = 0; // R2
-	w->stos[w->SP--] = 0; // R1
-	w->stos[w->SP--] = (unsigned int) parametry; // R0
-	w->stos[w->SP--] = 0xFFFFFFF1; // LR z przerwania
+	w->stos[OS_THREAD_STACK - 1] = 0x41000000; // PSR
+	w->stos[OS_THREAD_STACK - 2] = (unsigned int) watek; // PC
+	w->stos[OS_THREAD_STACK - 8] = (unsigned int) parametry; // R0
+	w->stos[OS_THREAD_STACK - 9] = 0xFFFFFFF1; // LR z przerwania
 
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP--] = 0;
-	w->stos[w->SP] = 0; // R4-R7
-
-	w->SP = (unsigned int) (&(w->stos[w->SP]));
+	w->SP = (unsigned int) (&(w->stos[OS_THREAD_STACK - 17]));
 
 	return 0;
 }
 /*================================================================================================*/
-void uruchomKernel(void) {
+void runKernel(void) {
 	OS.biezacyWatek = -1;
 	OS.dzialaj = 1;
 	while (1)
 		;
 }
 /*================================================================================================*/
-void wywolajKernel(unsigned int param, void* ptr) {
+void callKernel(unsigned int param, void* ptr) {
 	(void) param;
 	(void) ptr;
 	__asm("SVC #0\n");
 }
 /*================================================================================================*/
 /*================================================================================================*/
-static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned int priorytet) {
+static int saveISR(int irqNumber, void*irqHandler, unsigned int priorytet) {
 	irqNumber += 16;
 	if (virtualIrqHandlerTable[irqNumber])
 		return 1;
@@ -201,8 +200,8 @@ static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned in
 void systemInit(void) {
 	int returnCode;
 
-	przygotujRam();
-	przygotujZegary();
+	initRam();
+	initClocks();
 
 	NVIC_SetPriority(SVC_IRQn, 1);
 	NVIC_SetPriority(PendSV_IRQn, 0);
@@ -214,7 +213,7 @@ void systemInit(void) {
 	note("\t   CPU: STM32F051R8T6 @ %d Hz", zegaryHz.rdzen);
 	note("\t  Stos: 0x%.8X - %5d B", (unsigned int) &__stack, (unsigned int) &__main_stack_size);
 	note("\tSterta: 0x%.8X - %5d B", (unsigned int) &__heap_begin,
-	      (unsigned int) (&__heap_end - &__heap_begin));
+	      (unsigned int) &__main_heap_size);
 
 	returnCode = main();
 
@@ -227,7 +226,7 @@ void systemInit(void) {
 		;
 }
 /*================================================================================================*/
-static void przygotujRam(void) {
+static void initRam(void) {
 	unsigned int *bss_b = &__bss_begin;
 	unsigned int *bss_e = &__bss_end;
 	unsigned int *data_b = &__data_begin;
@@ -245,11 +244,27 @@ static void przygotujRam(void) {
 	}
 }
 /*================================================================================================*/
-static void przygotujZegary(void) {
-	zegaryHz.rdzen = HSE_VALUE;
-	zegaryHz.magistralaAHB = HSE_VALUE;
-	zegaryHz.magistralaAPB1 = HSE_VALUE;
-	zegaryHz.magistralaAPB2 = HSE_VALUE;
+static void initClocks(void) {
+	RCC->CR &= ~RCC_CR_PLLON; // PLL off
+	while ((RCC->CR & RCC_CR_PLLRDY) != 0)
+		;
+
+	RCC->CR |= RCC_CR_HSEON; // HSE on
+	while ((RCC->CR & RCC_CR_HSEON) == 0)
+		;
+
+	RCC->CFGR = 0x00110000;
+
+	RCC->CR |= RCC_CR_PLLON; // PLL on
+	while ((RCC->CR & RCC_CR_PLLRDY) == 0)
+		;
+
+	RCC->CFGR |= RCC_CFGR_SW_1;
+	RCC->CFGR3 |= 1;
+
+	zegaryHz.rdzen = 48000000;
+	zegaryHz.magistralaAHB = 48000000;
+	zegaryHz.magistralaAPB = 48000000;
 }
 /*================================================================================================*/
 caddr_t _sbrk(int incr) {
@@ -271,11 +286,11 @@ caddr_t _sbrk(int incr) {
 	return (caddr_t) current_block_address;
 }
 /*================================================================================================*/
-static void nmi_handler(void) {
+static void NMI_Handler(void) {
 	return;
 }
 /*================================================================================================*/
-void hardfault_evaulate(StosRejestrowPodstawowych *r) {
+void hardfault_evaulate(ExceptionFrame *r) {
 	error("TWARDY WYJATEK!");
 	error("Wartosci rejestrow rdzenia oraz SCB:");
 	printlnHex("R0", r->R0);
@@ -298,7 +313,7 @@ void hardfault_evaulate(StosRejestrowPodstawowych *r) {
 		;
 }
 /*================================================================================================*/
-void hardfault_handler(void) {
+void HardFault_Handler(void) {
 	__asm( ".syntax unified\n"
 			"MOVS   R0, #4  \n"
 			"MOV    R1, LR  \n"
@@ -312,7 +327,7 @@ void hardfault_handler(void) {
 			".syntax divided\n");
 }
 /*================================================================================================*/
-static void systemDefault_handler(void) {
+static void SystemDefault_Handler(void) {
 	unsigned int exceptionNumber = __get_IPSR();
 	if (virtualIrqHandlerTable[exceptionNumber] == 0)
 		while (1)
@@ -320,14 +335,14 @@ static void systemDefault_handler(void) {
 	virtualIrqHandlerTable[exceptionNumber]();
 }
 /*================================================================================================*/
-void svc_handler(unsigned int param, void *ptr) {
+void SVC_Handler(unsigned int param, void *ptr) {
 	info("Jestem w SVC!");
 	info("Wydruk przeslanych danych:");
 	printlnHex("u32 ", param);
 	printlnHex("void*", (unsigned int) ptr);
 }
 /*================================================================================================*/
-static void pendsv_handler(void) {
+static void PendSV_Handler(void) {
 	__asm("PUSH {LR} \n"
 			"PUSH {R4-R7} \n"
 			"MOV R4, R8 \n"
@@ -370,7 +385,7 @@ static void pendsv_handler(void) {
 			"POP {PC}");
 }
 /*================================================================================================*/
-static void systick_handler(void) {
+static void SysTick_Handler(void) {
 	__set_PRIMASK(1);
 	systemCnt++;
 	if ((systemCnt % 10) == 0) {

@@ -19,6 +19,7 @@ void note(const char* text, ...);
 void info(const char* text, ...);
 void warning(const char* text, ...);
 void error(const char* text, ...);
+void critical(const char* text, ...);
 void printlnHex(const char* label, unsigned int value);
 /*================================================================================================*/
 #endif /* G2SYSTEMLOG_H_ */

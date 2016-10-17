@@ -7,6 +7,7 @@ __stack = ORIGIN(RAM) + LENGTH(RAM);
 __main_stack_size = 1024;
 __heap_begin = __init_end;
 __heap_end = __stack - __main_stack_size;
+__main_heap_size = __heap_end - __heap_begin;
 
 ENTRY(systemInit)
 

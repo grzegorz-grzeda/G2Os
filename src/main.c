@@ -9,41 +9,6 @@
 #include "g2systemInit.h"
 #include "g2systemLog.h"
 /*================================================================================================*/
-#define LICZBA_PROB 5
-#define WYWOLANIE_DLA_SVC 2
-#define WYWOLANIE_DLA_PENDSV 3
-#define WYWOLANIE_DLA_HARDFAULT 4
-/*================================================================================================*/
-/*================================================================================================*/
-/*================================================================================================*/
-
-/*================================================================================================*/
-void przerzucLed(int numer) {
-	numer &= 0xF;
-	GPIOC->ODR ^= (1 << numer);
-}
-/*================================================================================================*/
-__attribute__ ((naked)) void watek1(void* param) {
-	(void) param;
-	info("Jestem w watku 1.");
-	for (;;) {
-		przerzucLed(8);
-		opoznienieMs(500);
-	}
-}
-;
-/*================================================================================================*/
-void watek2(void* param) {
-	(void) param;
-	info("Jestem w watku 2.");
-	for (;;) {
-		przerzucLed(9);
-		opoznienieMs(1000);
-	}
-}
-/*================================================================================================*/
-void (*f)(void);
-/*================================================================================================*/
 void inicjalizuj(void) {
 	info("Konfigurowanie diod LED.");
 	RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
@@ -54,11 +19,39 @@ void inicjalizuj(void) {
 	info("System gotowy do pracy.");
 }
 /*================================================================================================*/
+void przerzucLed(int numer) {
+	numer &= 0xF;
+	GPIOC->ODR ^= (1 << numer);
+}
+/*================================================================================================*/
+void watek1(void* param) {
+	(void) param;
+	if (param) {
+		info((const char*) param);
+	} else {
+		info("Jestem w watku 1.");
+	}
+	for (;;) {
+		przerzucLed(8);
+		delayMs(500);
+	}
+}
+;
+/*================================================================================================*/
+void watek2(void* param) {
+	(void) param;
+	info("Jestem w watku 2.");
+	for (;;) {
+		przerzucLed(9);
+		delayMs(100);
+	}
+}
+/*================================================================================================*/
 int main(void) {
 	inicjalizuj();
-	zarejestrujWatek(watek1, "W1", inicjalizuj);
-	zarejestrujWatek(watek2, "W2", NULL);
-	uruchomKernel();
+	registerThread(watek1, "W1", "Witaj swiecie z watka nr 1!");
+	registerThread(watek2, "W2", NULL);
+	runKernel();
 	return 0;
 }
 /*================================================================================================*/

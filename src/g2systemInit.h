@@ -19,25 +19,15 @@
 #define OS_THREAD_STACK 200
 #define OS_MAX_THREAD_CNT 5
 /*================================================================================================*/
-typedef struct {
-	unsigned int R0;
-	unsigned int R1;
-	unsigned int R2;
-	unsigned int R3;
-	unsigned int R12;
-	unsigned int LR;
-	unsigned int PC;
-	unsigned int PSR;
-} StosRejestrowPodstawowych;
 /*================================================================================================*/
-/*================================================================================================*/
-void opoznienieMs(unsigned int t);
-unsigned int pobierzCzasMs(void);
-int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void));
-void wyrejestrujPrzerwanie(int irqNumber);
-int zarejestrujWatek(void* watek, const char* nazwa, void* parametry);
-void uruchomKernel(void);
-void wywolajKernel(unsigned int param, void* ptr);
+void delayMs(unsigned int t);
+unsigned int getTimeMs(void);
+unsigned int getCoreHz(void);
+int registerISR(int irqNumber, void*irqHandler);
+void unregisterISR(int irqNumber);
+int registerThread(void* thread, const char* name, void* parameters);
+void runKernel(void);
+void callKernel(unsigned int param, void* ptr);
 /*================================================================================================*/
 /*================================================================================================*/
 #endif /* G2SYSTEMINIT_H_ */
