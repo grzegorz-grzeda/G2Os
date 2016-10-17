@@ -29,7 +29,8 @@ static int zapiszPrzerwanie(int irqNumber, void (*irqHandler)(void), unsigned in
 static void nmi_handler(void);
 static void hardfault_handler(void) __attribute__ ((naked));
 static void svc_handler(unsigned int param, void* ptr);
-static void pendsv_handler(void);
+static void pendsv_handler(void) __attribute__ ((naked));
+;
 static void systick_handler(void);
 static void systemDefault_handler(void);
 
@@ -47,11 +48,11 @@ unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) 0,
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) systemDefault_handler, // SVC
+      (unsigned int *) svc_handler, // SVC
       (unsigned int *) 0,
       (unsigned int *) 0,
-      (unsigned int *) systemDefault_handler, // PendSV
-      (unsigned int *) systemDefault_handler, // SysTick
+      (unsigned int *) pendsv_handler, // PendSV
+      (unsigned int *) systick_handler, // SysTick
       (unsigned int *) systemDefault_handler, // WWDG
       (unsigned int *) systemDefault_handler, // PVD
       (unsigned int *) systemDefault_handler, // RTC
@@ -82,6 +83,21 @@ unsigned int * vectorTable[] __attribute__ ((section(".vectorTable"))) = {
       (unsigned int *) systemDefault_handler, // USART2
       (unsigned int *) systemDefault_handler, // CEC
       (unsigned int *) systemDefault_handler };
+/*================================================================================================*/
+typedef struct {
+	void (*uchwyt)(void*);
+	void *parametry;
+	char nazwa[20];
+	unsigned int stos[OS_THREAD_STACK];
+	unsigned int SP;
+} Watek;
+/*================================================================================================*/
+struct {
+	Watek watki[OS_MAX_THREAD_CNT];
+	int biezacyWatek;
+	int liczbaWatkow;
+	int dzialaj;
+} OS;
 /*================================================================================================*/
 typedef void (*irqHandlerPtr)(void);
 /*================================================================================================*/
@@ -114,17 +130,54 @@ int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void)) {
 	return wynik;
 }
 /*================================================================================================*/
-int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void)) {
-	unsigned int priorytet = 1;
-	if (irqNumber == PendSV_IRQn)
-		priorytet = 0;
-	return zapiszPrzerwanie(irqNumber, irqHandler, priorytet);
-}
-/*================================================================================================*/
 void wyrejestrujPrzerwanie(int irqNumber) {
 	if (irqNumber >= 0)
 		NVIC_DisableIRQ(irqNumber);
 	virtualIrqHandlerTable[irqNumber + 16] = 0;
+}
+/*================================================================================================*/
+int zarejestrujWatek(void* watek, const char* nazwa, void* parametry) {
+	if (OS.liczbaWatkow == OS_MAX_THREAD_CNT)
+		return -1;
+
+	int cnt = OS.liczbaWatkow++;
+	Watek* w = &(OS.watki[cnt]);
+
+	w->uchwyt = watek;
+	strncpy(w->nazwa, nazwa, 20);
+	w->nazwa[19] = 0;
+	w->parametry = parametry;
+
+	w->SP = OS_THREAD_STACK - 1;
+	w->stos[w->SP--] = 0x41000000; // PSR
+	w->stos[w->SP--] = ((unsigned int) watek); // PC
+	w->stos[w->SP--] = 0; // LR
+	w->stos[w->SP--] = 0; // R12
+	w->stos[w->SP--] = 0; // R3
+	w->stos[w->SP--] = 0; // R2
+	w->stos[w->SP--] = 0; // R1
+	w->stos[w->SP--] = (unsigned int) parametry; // R0
+	w->stos[w->SP--] = 0xFFFFFFF1; // LR z przerwania
+
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP--] = 0;
+	w->stos[w->SP] = 0; // R4-R7
+
+	w->SP = (unsigned int) (&(w->stos[w->SP]));
+
+	return 0;
+}
+/*================================================================================================*/
+void uruchomKernel(void) {
+	OS.biezacyWatek = -1;
+	OS.dzialaj = 1;
+	while (1)
+		;
 }
 /*================================================================================================*/
 void wywolajKernel(unsigned int param, void* ptr) {
@@ -151,9 +204,9 @@ void systemInit(void) {
 	przygotujRam();
 	przygotujZegary();
 
-	zarejestrujPrzerwanieSystemowe(SVC_IRQn, (irqHandlerPtr) svc_handler);
-	zarejestrujPrzerwanieSystemowe(PendSV_IRQn, pendsv_handler);
-	zarejestrujPrzerwanieSystemowe(SysTick_IRQn, systick_handler);
+	NVIC_SetPriority(SVC_IRQn, 1);
+	NVIC_SetPriority(PendSV_IRQn, 0);
+	NVIC_SetPriority(SysTick_IRQn, 1);
 
 	SysTick_Config(zegaryHz.rdzen / SYSTICK_RATE_HZ);
 	initLog();
@@ -275,11 +328,55 @@ void svc_handler(unsigned int param, void *ptr) {
 }
 /*================================================================================================*/
 static void pendsv_handler(void) {
-	info("Jestem w PendSV!");
+	__asm("PUSH {LR} \n"
+			"PUSH {R4-R7} \n"
+			"MOV R4, R8 \n"
+			"MOV R5, R9 \n"
+			"MOV R6, R10 \n"
+			"MOV R7, R11 \n"
+			"PUSH {R4-R7}");
+	if (OS.dzialaj) {
+		unsigned int stackPtr;
+		if (OS.biezacyWatek < 0) {
+			OS.biezacyWatek++;
+			stackPtr = OS.watki[OS.biezacyWatek].SP;
+			__asm volatile("msr msp, %0\n"
+					"isb \n"
+					"dsb \n"
+					::"r"(stackPtr));
+		} else {
+			__asm volatile("mrs %0, msp\n"
+					"isb \n"
+					"dsb \n"
+					:"=r"(stackPtr));
+			OS.watki[OS.biezacyWatek].SP = stackPtr;
+
+			OS.biezacyWatek++;
+			OS.biezacyWatek %= OS.liczbaWatkow;
+
+			stackPtr = OS.watki[OS.biezacyWatek].SP;
+			__asm volatile("msr msp, %0\n"
+					"isb \n"
+					"dsb \n"
+					::"r"(stackPtr));
+		}
+	}
+	__asm("POP {R4-R7} \n"
+			"MOV R11, R7 \n"
+			"MOV R10, R6 \n"
+			"MOV R9, R5 \n"
+			"MOV R8, R4 \n"
+			"POP {R4-R7} \n"
+			"POP {PC}");
 }
 /*================================================================================================*/
 static void systick_handler(void) {
+	__set_PRIMASK(1);
 	systemCnt++;
+	if ((systemCnt % 10) == 0) {
+		SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+	}
+	__set_PRIMASK(0);
 }
 /*================================================================================================*/
 /*                                              EOF                                               */

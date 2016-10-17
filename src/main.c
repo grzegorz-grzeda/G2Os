@@ -14,19 +14,7 @@
 #define WYWOLANIE_DLA_PENDSV 3
 #define WYWOLANIE_DLA_HARDFAULT 4
 /*================================================================================================*/
-#define OS_STOS_WATEK 50
-#define OS_MAX_WATKOW 5
 /*================================================================================================*/
-typedef struct {
-	void (*uchwyt)(void*);
-	unsigned int stos[OS_STOS_WATEK + sizeof(StosRejestrowPodstawowych)
-	      + sizeof(StosRejestrowPozostalych)];
-} Watek;
-/*================================================================================================*/
-struct {
-	Watek watki[OS_MAX_WATKOW];
-	unsigned int biezacyWatek;
-} OS;
 /*================================================================================================*/
 
 /*================================================================================================*/
@@ -35,17 +23,22 @@ void przerzucLed(int numer) {
 	GPIOC->ODR ^= (1 << numer);
 }
 /*================================================================================================*/
-void watek1(void* param) {
+__attribute__ ((naked)) void watek1(void* param) {
+	(void) param;
+	info("Jestem w watku 1.");
 	for (;;) {
 		przerzucLed(8);
 		opoznienieMs(500);
 	}
 }
+;
 /*================================================================================================*/
 void watek2(void* param) {
+	(void) param;
+	info("Jestem w watku 2.");
 	for (;;) {
 		przerzucLed(9);
-		opoznienieMs(250);
+		opoznienieMs(1000);
 	}
 }
 /*================================================================================================*/
@@ -62,9 +55,11 @@ void inicjalizuj(void) {
 }
 /*================================================================================================*/
 int main(void) {
-	int kodBledu = 0;
-	f();
-	return kodBledu;
+	inicjalizuj();
+	zarejestrujWatek(watek1, "W1", inicjalizuj);
+	zarejestrujWatek(watek2, "W2", NULL);
+	uruchomKernel();
+	return 0;
 }
 /*================================================================================================*/
 /*                                              EOF                                               */

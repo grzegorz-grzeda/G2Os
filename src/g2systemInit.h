@@ -12,8 +12,12 @@
 #include "stm32f0xx.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 /*================================================================================================*/
 #define SYSTICK_RATE_HZ 1000
+/*================================================================================================*/
+#define OS_THREAD_STACK 200
+#define OS_MAX_THREAD_CNT 5
 /*================================================================================================*/
 typedef struct {
 	unsigned int R0;
@@ -26,22 +30,13 @@ typedef struct {
 	unsigned int PSR;
 } StosRejestrowPodstawowych;
 /*================================================================================================*/
-typedef struct {
-	unsigned int R4;
-	unsigned int R5;
-	unsigned int R6;
-	unsigned int R7;
-	unsigned int R8;
-	unsigned int R9;
-	unsigned int R10;
-	unsigned int R11;
-} StosRejestrowPozostalych;
 /*================================================================================================*/
 void opoznienieMs(unsigned int t);
 unsigned int pobierzCzasMs(void);
-int zarejestrujPrzerwanieSystemowe(int irqNumber, void (*irqHandler)(void));
 int zarejestrujPrzerwanie(int irqNumber, void (*irqHandler)(void));
 void wyrejestrujPrzerwanie(int irqNumber);
+int zarejestrujWatek(void* watek, const char* nazwa, void* parametry);
+void uruchomKernel(void);
 void wywolajKernel(unsigned int param, void* ptr);
 /*================================================================================================*/
 /*================================================================================================*/
