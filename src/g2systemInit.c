@@ -140,8 +140,8 @@ void unregisterISR(int irqNumber) {
 	virtualIrqHandlerTable[irqNumber + 16] = 0;
 }
 /*================================================================================================*/
-void callKernel(unsigned int param, void* ptr) {
-	(void) param;
+void callKernel(unsigned int parameter, void* ptr) {
+	(void) parameter;
 	(void) ptr;
 	__asm("SVC #0\n");
 }
@@ -252,16 +252,16 @@ caddr_t _sbrk(int incr) {
 }
 /*================================================================================================*/
 static void NMI_Handler(void) {
-	error("PRZERWANIE NIEMASKOWALNE!");
-	error("Przypadek nieobslugiwany");
-	error("Zatrzymanie systemu...");
+	error("NON-MASCABLE INTERRUPT!");
+	error("Unsupported case.");
+	error("System halt...");
 	while (1) {
 	}
 }
 /*================================================================================================*/
 void hardfault_evaulate(ExceptionFrame *r) {
-	error("TWARDY WYJATEK!");
-	error("Wartosci rejestrow rdzenia oraz SCB:");
+	error("HARD FAULT!");
+	error("Values of Core and SCB registers:");
 	printlnHex("R0", r->R0);
 	printlnHex("R1", r->R1);
 	printlnHex("R2", r->R2);
@@ -277,7 +277,7 @@ void hardfault_evaulate(ExceptionFrame *r) {
 	printlnHex("CCR", SCB->CCR);
 	printlnHex("SHP0", SCB->SHP[0]);
 	printlnHex("SHP1", SCB->SHP[1]);
-	error("Zatrzymanie systemu...");
+	error("System halt...");
 	while (1) {
 	}
 }
@@ -298,10 +298,11 @@ void HardFault_Handler(void) {
 /*================================================================================================*/
 static void System_Default_Handler(void) {
 	unsigned int exceptionNumber = __get_IPSR();
-	if (virtualIrqHandlerTable[exceptionNumber] == 0)
+	if (virtualIrqHandlerTable[exceptionNumber] == 0) {
 		Dummy_Handler();
-	else
+	} else {
 		virtualIrqHandlerTable[exceptionNumber]();
+	}
 }
 /*================================================================================================*/
 void SVC_Handler(unsigned int param, void *ptr) {
@@ -321,8 +322,8 @@ void SysTick_Default_Handler(void) {
 }
 /*================================================================================================*/
 void Dummy_Handler(void) {
-	while (1)
-		;
+	while (1) {
+	}
 }
 /*================================================================================================*/
 /*                                              EOF                                               */

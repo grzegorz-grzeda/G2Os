@@ -27,21 +27,22 @@ struct {
 	int work;
 } OS;
 /*================================================================================================*/
-int registerThread(void* watek, const char* nazwa, void* parametry) {
-	if (OS.numberOfThreads == OS_MAX_THREAD_CNT)
+int registerThread(void* threadHandle, const char* name, void* parameters) {
+	if (OS.numberOfThreads == OS_MAX_THREAD_CNT) {
 		return -1;
+	}
 
 	int cnt = OS.numberOfThreads++;
 	Thread* w = &(OS.threads[cnt]);
 
-	w->handler = watek;
-	strncpy(w->name, nazwa, 20);
+	w->handler = threadHandle;
+	strncpy(w->name, name, 20);
 	w->name[19] = 0;
-	w->parameters = parametry;
+	w->parameters = parameters;
 
 	w->stack[OS_THREAD_STACK - 1] = 0x41000000; // PSR
-	w->stack[OS_THREAD_STACK - 2] = (unsigned int) watek; // PC
-	w->stack[OS_THREAD_STACK - 8] = (unsigned int) parametry; // R0
+	w->stack[OS_THREAD_STACK - 2] = (unsigned int) threadHandle; // PC
+	w->stack[OS_THREAD_STACK - 8] = (unsigned int) parameters; // R0
 	w->stack[OS_THREAD_STACK - 9] = 0xFFFFFFF1; // LR z przerwania
 
 	w->stackPointer = (unsigned int) (&(w->stack[OS_THREAD_STACK - 17]));
@@ -52,8 +53,8 @@ int registerThread(void* watek, const char* nazwa, void* parametry) {
 void runOS(void) {
 	OS.currentThreadNumber = -1;
 	OS.work = 1;
-	while (1)
-		;
+	while (1) {
+	}
 }
 /*================================================================================================*/
 void G2OS_PendSV_Handler(void) {

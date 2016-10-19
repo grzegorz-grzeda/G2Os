@@ -10,48 +10,47 @@
 #include "g2systemLog.h"
 #include "g2OsThread.h"
 /*================================================================================================*/
-void inicjalizuj(void) {
-	info("Konfigurowanie diod LED.");
+void initialize(void) {
+	info("Configuring LEDs.");
 	RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
 	GPIOC->MODER &= ~(3 << (8 << 1)) | (3 << (9 << 1));
 	GPIOC->MODER |= (1 << (8 << 1)) | (1 << (9 << 1));
 	GPIOC->ODR = 0;
-	info("Konfigurowanie kernela.");
-	info("System gotowy do pracy.");
+	info("System ready to work.");
 }
 /*================================================================================================*/
-void przerzucLed(int numer) {
-	numer &= 0xF;
-	GPIOC->ODR ^= (1 << numer);
+void toggleLed(int number) {
+	number &= 0xF;
+	GPIOC->ODR ^= (1 << number);
 }
 /*================================================================================================*/
-void watek1(void* param) {
+void thread1(void* param) {
 	(void) param;
 	if (param) {
 		info((const char*) param);
 	} else {
-		info("Jestem w watku 1.");
+		info("I'm in thread no. 1.");
 	}
 	for (;;) {
-		przerzucLed(8);
+		toggleLed(8);
 		delayMs(500);
 	}
 }
 ;
 /*================================================================================================*/
-void watek2(void* param) {
+void thread2(void* param) {
 	(void) param;
-	info("Jestem w watku 2.");
+	info("I'm in thead no. 2.");
 	for (;;) {
-		przerzucLed(9);
+		toggleLed(9);
 		delayMs(250);
 	}
 }
 /*================================================================================================*/
 int main(void) {
-	inicjalizuj();
-	registerThread(watek1, "W1", "Witaj swiecie z watka nr 1!");
-	registerThread(watek2, "W2", NULL);
+	initialize();
+	registerThread(thread1, "W1", "Welcome from thread no. 1!");
+	registerThread(thread2, "W2", NULL);
 	runOS();
 	return 0;
 }
