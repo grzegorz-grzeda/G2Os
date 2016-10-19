@@ -16,17 +16,12 @@
 /*================================================================================================*/
 #define SYSTICK_RATE_HZ 1000
 /*================================================================================================*/
-#define OS_THREAD_STACK 200
-#define OS_MAX_THREAD_CNT 5
-/*================================================================================================*/
 /*================================================================================================*/
 void delayMs(unsigned int t);
 unsigned int getTimeMs(void);
 unsigned int getCoreHz(void);
 int registerISR(int irqNumber, void*irqHandler);
 void unregisterISR(int irqNumber);
-int registerThread(void* thread, const char* name, void* parameters);
-void runKernel(void);
 void callKernel(unsigned int param, void* ptr);
 /*================================================================================================*/
 /*================================================================================================*/
